@@ -1,0 +1,538 @@
+<title>The Analyst</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;700&family=Zen+Kaku+Gothic+New:wght@700&display=swap">
+<style>
+/* Layout: 左に「依頼フォーム＋依頼の進捗＋レポート一覧」、右に選んだレポート（結論→IR→セグメント→企業別→報道）。狭い画面では縦積み。 */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --sunken:#eaeeec; --ink:#15201b; --ink-2:#47534d; --ink-3:#77827c; --line:#dbe1de;
+  --accent:#1d5c86; --accent-soft:#e1ecf4; --series:#2a78d6; --series-soft:#9ec5f4;
+  --good:#16783a; --good-soft:#e2f2e7; --bad:#bf3a2c; --bad-soft:#fbe6e2; --news:#865700; --news-soft:#f9efd9;
+  --f-display:"Zen Kaku Gothic New","IBM Plex Sans JP","Hiragino Sans","Yu Gothic UI",sans-serif;
+  --f-body:"IBM Plex Sans JP","Hiragino Sans","Yu Gothic UI",Meiryo,sans-serif;
+  --f-data:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101614; --surface:#18201d; --sunken:#121916; --ink:#e6ece9; --ink-2:#b2bdb7; --ink-3:#86918b; --line:#2b3632;
+  --accent:#7db5de; --accent-soft:#1d2e3a; --series:#3987e5; --series-soft:#2b4f78;
+  --good:#5cc483; --good-soft:#173324; --bad:#f08072; --bad-soft:#3a1d19; --news:#e0b259; --news-soft:#352a14; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#18201d; --sunken:#121916; --ink:#e6ece9; --ink-2:#b2bdb7; --ink-3:#86918b; --line:#2b3632;
+  --accent:#7db5de; --accent-soft:#1d2e3a; --series:#3987e5; --series-soft:#2b4f78;
+  --good:#5cc483; --good-soft:#173324; --bad:#f08072; --bad-soft:#3a1d19; --news:#e0b259; --news-soft:#352a14; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.7 var(--f-body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:330px minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.35}
+h1{font-size:22px;letter-spacing:.01em}
+h2{font-size:18px}
+h3{font-size:15px}
+.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
+.side{display:flex;flex-direction:column;gap:16px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px)}
+@media (max-width:900px){.side{position:static}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px}
+.panel h2{font-size:15px;margin-bottom:10px}
+form{display:flex;flex-direction:column;gap:10px}
+label{font-size:12px;color:var(--ink-2);display:flex;flex-direction:column;gap:4px}
+input,select{font:inherit;font-size:14px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%}
+input:focus-visible,select:focus-visible,button:focus-visible,.rep:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg-ctl{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.seg-ctl input{position:absolute;opacity:0;width:1px;height:1px}
+.seg-ctl label{flex-direction:row;justify-content:center;padding:7px 4px;font-size:13px;color:var(--ink-2);cursor:pointer;border-right:1px solid var(--line)}
+.seg-ctl label:last-child{border-right:0}
+.seg-ctl input:checked+span{color:var(--accent);font-weight:700}
+.seg-ctl label:has(input:checked){background:var(--accent-soft)}
+.hint{font-size:12px;color:var(--ink-3);line-height:1.6}
+button{font:inherit;font-weight:700;font-size:14px;border-radius:7px;border:1px solid var(--accent);background:var(--accent);color:var(--surface);padding:9px 12px;cursor:pointer}
+button[disabled]{opacity:.5;cursor:not-allowed}
+button.ghost{background:transparent;color:var(--accent);font-weight:500;padding:5px 10px;font-size:13px}
+.msg{font-size:13px;border-radius:7px;padding:8px 10px;line-height:1.6}
+.msg.ok{background:var(--good-soft);color:var(--good)}
+.msg.warn{background:var(--news-soft);color:var(--news)}
+.msg.err{background:var(--bad-soft);color:var(--bad)}
+.list{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow:auto}
+.req{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;padding:8px 10px;border-radius:7px;background:var(--bg);font-size:13px}
+.req .t{font-weight:500;overflow-wrap:anywhere}
+.req .d{grid-column:1/-1;font-size:12px;color:var(--ink-3);overflow-wrap:anywhere}
+.pill{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;align-self:start}
+.pill.queued{background:var(--sunken);color:var(--ink-2)}
+.pill.running{background:var(--accent-soft);color:var(--accent)}
+.pill.done{background:var(--good-soft);color:var(--good)}
+.pill.error{background:var(--bad-soft);color:var(--bad)}
+.rep{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;color:var(--ink);font-weight:400;padding:8px 10px;border-radius:7px;font-size:13px}
+.rep:hover{background:var(--bg)}
+.rep[aria-current="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.rep b{display:block;font-weight:500;overflow-wrap:anywhere}
+.rep small{color:var(--ink-3)}
+main{min-width:0;display:flex;flex-direction:column;gap:18px}
+.head{display:flex;flex-direction:column;gap:6px}
+.meta{font-size:12.5px;color:var(--ink-3)}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;margin-right:6px;vertical-align:2px}
+.tag.ir{background:var(--accent-soft);color:var(--accent)}
+.tag.news{background:var(--news-soft);color:var(--news)}
+.tag.mix{background:var(--sunken);color:var(--ink-2)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.card>h2{margin-bottom:12px}
+.headline{font-size:17px;font-weight:700;line-height:1.6;margin:0 0 8px}
+ul.plain{margin:0;padding-left:1.2em}
+ul.plain li{margin:2px 0}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.good-col h3{color:var(--good)} .bad-col h3{color:var(--bad)}
+.good-col,.bad-col{border-top:3px solid var(--good);padding-top:10px}
+.bad-col{border-top-color:var(--bad)}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:500;color:var(--ink-3);font-size:12px}
+td.n,th.n{text-align:right;white-space:nowrap;font-family:var(--f-data);font-variant-numeric:tabular-nums}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+.chart{position:relative}
+.chart svg{width:100%;height:auto;display:block;overflow:visible}
+.chart text{fill:var(--ink-3);font:11px var(--f-body)}
+.chart .lbl{fill:var(--ink-2);font-size:11.5px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .zero{stroke:var(--ink-3);stroke-width:1}
+.chart .med{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:3 4}
+.chart .dot{fill:var(--series);fill-opacity:.55;stroke:var(--surface);stroke-width:2}
+.chart .dot.loss{fill:var(--bad)}
+.chart .hit{fill:transparent;cursor:default}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12px;line-height:1.5;padding:6px 9px;border-radius:6px;white-space:nowrap;transform:translate(-50%,calc(-100% - 10px));z-index:2}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--ink-2);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px;background:var(--series);opacity:.7}
+.legend i.loss{background:var(--bad);border-radius:2px;transform:rotate(45deg)}
+.legend i.prof{background:var(--series);border-radius:2px;opacity:1}
+.legend i.rev{background:var(--series-soft);border-radius:2px;opacity:1}
+.co{display:flex;flex-direction:column;gap:12px}
+.co+.co{border-top:1px solid var(--line);padding-top:18px;margin-top:6px}
+.co-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px}
+.co-head small{color:var(--ink-3);font-size:12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.kpi{background:var(--bg);border-radius:8px;padding:8px 10px}
+.kpi .v{font-family:var(--f-data);font-size:18px;font-weight:500;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:11.5px;color:var(--ink-3)}
+.bars{display:flex;flex-direction:column;gap:8px}
+.bar-row{display:grid;grid-template-columns:minmax(80px,150px) minmax(0,1fr);gap:10px;align-items:center;font-size:13px}
+.bar-row .nm{overflow-wrap:anywhere}
+.bar-track{display:flex;flex-direction:column;gap:2px}
+.bar{height:12px;border-radius:0 4px 4px 0;background:var(--series);min-width:2px}
+.bar.prior{height:6px;background:var(--line)}
+.bar-cap{font-size:11.5px;color:var(--ink-2);font-family:var(--f-data)}
+.note{font-size:12.5px;color:var(--ink-3)}
+.news-item{display:grid;grid-template-columns:86px minmax(0,1fr);gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.news-item time{font-family:var(--f-data);font-size:12px;color:var(--ink-3)}
+.news-item small{color:var(--ink-3)}
+a{color:var(--accent)}
+.empty{display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.steps{margin:0;padding-left:1.3em;color:var(--ink-2)}
+details summary{cursor:pointer;color:var(--accent);font-size:13px;font-weight:500}
+@media (prefers-reduced-motion:no-preference){.card{transition:border-color .2s}}
+</style>
+
+<div class="wrap">
+  <aside class="side">
+    <div class="head">
+      <div class="eyebrow">IR × 業界ニュース スキャン</div>
+      <h1>The Analyst</h1>
+      <div class="meta">有価証券報告書（EDINET）とニュースから、どの事業が儲かっているかを調べます。</div>
+    </div>
+
+    <section class="panel" aria-labelledby="h-new">
+      <h2 id="h-new">新しい分析を依頼</h2>
+      <form id="f" novalidate>
+        <div class="seg-ctl" role="radiogroup" aria-label="対象の指定方法">
+          <label><input type="radio" name="mode" id="m-company" value="company" checked><span>企業を指定</span></label>
+          <label><input type="radio" name="mode" id="m-industry" value="industry"><span>業種で抽出</span></label>
+          <label><input type="radio" name="mode" id="m-check" value="check"><span>接続診断</span></label>
+        </div>
+        <label for="target" id="target-l"><span id="target-cap">会社名または証券コード（カンマ区切り）</span>
+          <input id="target" name="target" autocomplete="off" placeholder="例：トヨタ自動車, 7267, スズキ"></label>
+        <label for="name_filter" id="nf-l" hidden>社名の絞り込み（任意）
+          <input id="name_filter" name="name_filter" autocomplete="off" placeholder="例：システム, ソフト"></label>
+        <label for="news_keywords" id="kw-l">ニュース検索の業界キーワード（任意）
+          <input id="news_keywords" name="news_keywords" autocomplete="off" placeholder="例：EV, 自動車部品"></label>
+        <div class="row2" id="nums">
+          <label for="max_companies">最大社数<input id="max_companies" name="max_companies" type="number" min="1" max="30" value="12"></label>
+          <label for="news_days">ニュース期間（日）<input id="news_days" name="news_days" type="number" min="7" max="365" value="90"></label>
+        </div>
+        <button id="submit" type="submit">GitHubで分析を開始</button>
+        <div id="form-msg" class="msg" hidden></div>
+        <p class="hint" id="form-hint">分析はGitHub（the-analyst）上で実行されます。初回は5〜15分、2回目以降は数分で、終わるとこのページに結果が表示されます。</p>
+      </form>
+    </section>
+
+    <section class="panel" aria-labelledby="h-req">
+      <h2 id="h-req">依頼の状況</h2>
+      <div id="reqs" class="list"><p class="hint">まだ依頼はありません。</p></div>
+    </section>
+
+    <section class="panel" aria-labelledby="h-rep">
+      <h2 id="h-rep">レポート</h2>
+      <div id="reps" class="list"><p class="hint">読み込み中…</p></div>
+    </section>
+  </aside>
+
+  <main id="main">
+    <section class="card empty" id="placeholder">
+      <div class="eyebrow">レポート</div>
+      <h2>左の一覧からレポートを選ぶと、ここに表示されます</h2>
+      <ol class="steps">
+        <li>会社名（複数可）か業種を入れて「GitHubで分析を開始」を押す</li>
+        <li>「依頼の状況」が「GitHubで分析中」→「完了」に変わるのを待つ</li>
+        <li>完了したレポートが自動で開きます</li>
+      </ol>
+    </section>
+    <div id="report" hidden></div>
+  </main>
+</div>
+<div id="tip" class="tip" hidden></div>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const safeUrl = (u) => (typeof u === "string" && /^https:\/\//.test(u) ? u : null);
+  const oku = (v) => (v == null ? "—" : Math.round(v / 1e8).toLocaleString("ja-JP"));
+  const pct = (v, sign = false, d = 1) => (v == null ? "—" : (sign && v > 0 ? "+" : "") + (v * 100).toFixed(d) + "%");
+  const cls = (v) => (v == null ? "" : v > 0 ? "pos" : v < 0 ? "neg" : "");
+  const SERVER = "Claude Code Remote";
+
+  const state = { db: null, mcp: null, user: null, uid: null, canWrite: null, config: null,
+                  index: [], requests: [], selected: null, report: null, pendingAutoOpen: null };
+
+  // ---------------------------------------------------------------- フォーム
+  const form = $("#f");
+  function syncMode() {
+    const mode = form.mode.value;
+    $("#target-cap").textContent = mode === "industry" ? "業種名（東証33業種）" : mode === "check" ? "会社名（任意。名前の照合も確認）" : "会社名または証券コード（カンマ区切り）";
+    $("#target").placeholder = mode === "industry" ? "例：情報・通信業、小売業、医薬品" : mode === "check" ? "例：任天堂" : "例：トヨタ自動車, 7267, スズキ";
+    $("#nf-l").hidden = mode !== "industry";
+    $("#kw-l").hidden = mode === "check";
+    $("#nums").hidden = mode === "check";
+    $("#submit").textContent = mode === "check" ? "接続診断を実行" : "GitHubで分析を開始";
+  }
+  form.addEventListener("change", (e) => { if (e.target.name === "mode") syncMode(); });
+  syncMode();
+
+  function showMsg(kind, text) {
+    const m = $("#form-msg");
+    m.className = "msg " + kind; m.textContent = text; m.hidden = !text;
+  }
+
+  function newId(mode) {
+    const d = new Date(Date.now() + 9 * 3600e3).toISOString(); // JST
+    const stamp = d.slice(0, 10).replace(/-/g, "") + "-" + d.slice(11, 19).replace(/:/g, "");
+    const rnd = Math.random().toString(36).slice(2, 6);
+    return `${stamp}-${mode}-${rnd}`;
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!state.db) { showMsg("err", "このページの保存領域に接続できません。claude.ai でサインインした状態で開いてください。"); return; }
+    const mode = form.mode.value;
+    const target = form.target.value.trim();
+    if (mode !== "check" && !target) { showMsg("err", mode === "industry" ? "業種名を入力してください。" : "会社名か証券コードを入力してください。"); form.target.focus(); return; }
+    const req = {
+      id: newId(mode), mode, target, name_filter: mode === "industry" ? form.name_filter.value.trim() : "",
+      news_keywords: mode === "check" ? "" : form.news_keywords.value.trim(),
+      max_companies: Math.max(1, Math.min(30, parseInt(form.max_companies.value, 10) || 12)),
+      news_days: Math.max(7, Math.min(365, parseInt(form.news_days.value, 10) || 90)),
+      status: "queued", created_at: new Date().toISOString(), created_by: state.uid || null,
+    };
+    $("#submit").disabled = true;
+    try {
+      await state.db.doc("requests/" + req.id).set(req);
+    } catch (err) {
+      $("#submit").disabled = false;
+      showMsg("err", err?.code === "invalid_argument" ? "依頼を保存する権限がありません（閲覧のみの共有です）。" : "依頼を保存できませんでした。少し待ってから、もう一度押してください。");
+      return;
+    }
+    state.pendingAutoOpen = req.id;
+    await wake(req.id);
+    $("#submit").disabled = false;
+  });
+
+  // GitHub での実行を担当する Claude のタスクを起こす
+  async function wake(id) {
+    const fallback = "依頼は保存しました。Claude との会話で「The Analyst の未処理の依頼を処理して」と送ると実行されます。";
+    if (!state.mcp || !state.config?.trigger_id) { showMsg("warn", fallback); return; }
+    try {
+      await state.mcp.callTool(SERVER, "fire_trigger", { trigger_id: state.config.trigger_id, text: "request_id=" + id });
+      showMsg("ok", "依頼しました。GitHubで分析が始まると「依頼の状況」が更新されます。");
+    } catch (err) {
+      const code = err?.code;
+      if (code === "approval_required" || code === "not_in_manifest" || code === "consent_required")
+        showMsg("warn", "依頼は保存しました。実行を始めるには、このページに「Claude Code Remote」の利用を許可してください（許可後にもう一度依頼してください）。" );
+      else if (code === "server_not_connected" || code === "needs_reauth")
+        showMsg("warn", "依頼は保存しました。claude.ai の 設定 → コネクタ で「Claude Code Remote」を接続すると、ここから実行できます。いまは Claude との会話で「The Analyst の未処理の依頼を処理して」と送ってください。");
+      else if (code === "tool_error")
+        showMsg("warn", "依頼は保存しました。実行担当のタスクを起動できませんでした（" + (err.message || "").slice(0, 120) + "）。Claude との会話で「The Analyst の未処理の依頼を処理して」と送ってください。");
+      else showMsg("warn", "依頼は保存しました。起動の結果を確認できませんでした。数分たっても「依頼の状況」が変わらない場合は、Claude との会話で「The Analyst の未処理の依頼を処理して」と送ってください。");
+    }
+  }
+
+  // ---------------------------------------------------------------- 一覧
+  const STATUS = { queued: "受付済み", running: "GitHubで分析中", done: "完了", error: "エラー" };
+  const MODE = { company: "企業", industry: "業種", check: "接続診断" };
+  function fmtTime(iso) {
+    if (!iso) return "";
+    const d = new Date(iso); if (isNaN(d)) return esc(iso);
+    return d.toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  }
+  function renderRequests() {
+    const box = $("#reqs");
+    if (!state.requests.length) { box.innerHTML = '<p class="hint">まだ依頼はありません。</p>'; return; }
+    box.innerHTML = state.requests.map((r) => {
+      const st = STATUS[r.status] ? r.status : "queued";
+      let detail = `${MODE[r.mode] || ""}・${fmtTime(r.created_at)}`;
+      if (r.status === "error" && r.error) detail += `<br>${esc(r.error)}`;
+      if (r.status === "error" && Array.isArray(r.check)) detail += "<br>" + r.check.map((c) => `${c.ok === true ? "✅" : c.ok === false ? "❌" : "⚪"} ${esc(c.item)}`).join("<br>");
+      if (r.status === "running" && r.run_url && safeUrl(r.run_url)) detail += ` ・<a href="${esc(r.run_url)}" target="_blank" rel="noopener">実行画面</a>`;
+      if (r.status === "done" && r.mode === "check" && Array.isArray(r.check)) detail += "<br>" + r.check.map((c) => `${c.ok === true ? "✅" : c.ok === false ? "❌" : "⚪"} ${esc(c.item)}`).join("<br>");
+      const open = r.status === "done" && r.report_id ? `<button class="ghost" data-open="${esc(r.report_id)}" type="button">開く</button>` : "";
+      return `<div class="req"><span class="t">${esc(r.target || (r.mode === "check" ? "接続診断" : "—"))}</span><span class="pill ${st}">${STATUS[st]}</span><span class="d">${detail} ${open}</span></div>`;
+    }).join("");
+  }
+  function renderIndex() {
+    const box = $("#reps");
+    if (!state.index.length) { box.innerHTML = '<p class="hint">まだレポートはありません。上のフォームから最初の分析を依頼してください。</p>'; return; }
+    box.innerHTML = state.index.map((x) => `<button class="rep" type="button" data-open="${esc(x.slug)}" aria-current="${x.slug === state.selected}">
+      <b>${esc(x.subject || x.title)}</b><small>${esc(x.generated_at || "")}${x.sample ? "・サンプル" : ""}・${(x.companies || []).length}社</small></button>`).join("");
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-open]");
+    if (b) openReport(b.getAttribute("data-open"));
+  });
+
+  async function openReport(slug) {
+    if (!state.db || !slug) return;
+    state.selected = slug; renderIndex();
+    try {
+      const snap = await state.db.doc("reports/" + slug).get();
+      if (!snap.exists) { renderMissing(); return; }
+      state.report = snap.data();
+      renderReport(state.report);
+      if (window.innerWidth < 900) $("#main").scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch { renderMissing(); }
+  }
+  function renderMissing() {
+    $("#placeholder").hidden = false; $("#report").hidden = true;
+    $("#placeholder h2").textContent = "このレポートを読み込めませんでした。少し待ってから、もう一度選んでください。";
+  }
+
+  // ---------------------------------------------------------------- 図
+  function niceTicks(min, max, n = 5) {
+    if (min === max) { min -= 0.05; max += 0.05; }
+    const span = max - min, step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => span / s <= n + 0.5) || mag * 10;
+    const t = []; for (let v = Math.ceil(min / step) * step; v <= max + 1e-12; v += step) t.push(+v.toFixed(10));
+    return { ticks: t, lo: Math.min(min, t[0]), hi: Math.max(max, t[t.length - 1]) };
+  }
+  const median = (a) => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+
+  function scatter(points, { xLabel, yLabel, labelTop = 8 }) {
+    const W = 720, H = 400, L = 58, R = 18, T = 18, B = 46;
+    const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+    const padX = (Math.max(...xs) - Math.min(...xs)) * 0.12 || 0.05, padY = (Math.max(...ys) - Math.min(...ys)) * 0.14 || 0.05;
+    const X = niceTicks(Math.min(...xs, 0) - padX, Math.max(...xs) + padX), Y = niceTicks(Math.min(...ys, 0) - padY, Math.max(...ys) + padY);
+    const sx = (v) => L + (v - X.lo) / (X.hi - X.lo) * (W - L - R), sy = (v) => T + (1 - (v - Y.lo) / (Y.hi - Y.lo)) * (H - T - B);
+    const maxR = Math.max(...points.map((p) => p.size || 1));
+    const rad = (p) => 6 + 26 * Math.sqrt((p.size || 1) / maxR);
+    let g = "";
+    Y.ticks.forEach((t) => { g += `<line class="${t === 0 ? "zero" : "grid"}" x1="${L}" x2="${W - R}" y1="${sy(t)}" y2="${sy(t)}"/><text x="${L - 8}" y="${sy(t) + 4}" text-anchor="end">${pct(t, false, 0)}</text>`; });
+    X.ticks.forEach((t) => { g += `<text x="${sx(t)}" y="${H - B + 18}" text-anchor="middle">${pct(t, false, 0)}</text>`; if (t === 0) g += `<line class="zero" x1="${sx(0)}" x2="${sx(0)}" y1="${T}" y2="${H - B}"/>`; });
+    if (points.length >= 3) {
+      const mx = median(xs), my = median(ys);
+      g += `<line class="med" x1="${sx(mx)}" x2="${sx(mx)}" y1="${T}" y2="${H - B}"/><line class="med" x1="${L}" x2="${W - R}" y1="${sy(my)}" y2="${sy(my)}"/>`;
+      g += `<text x="${W - R}" y="${T + 10}" text-anchor="end">高成長・高収益</text><text x="${L + 6}" y="${H - B - 8}">低成長・低収益</text>`;
+    }
+    g += `<text x="${(L + W - R) / 2}" y="${H - 8}" text-anchor="middle">${esc(xLabel)}</text><text transform="translate(14 ${(T + H - B) / 2}) rotate(-90)" text-anchor="middle">${esc(yLabel)}</text>`;
+    const sorted = [...points].sort((a, b) => (b.size || 0) - (a.size || 0));
+    const labelled = new Set(sorted.slice(0, labelTop));
+    sorted.forEach((p) => {
+      const cx = sx(p.x), cy = sy(p.y), r = rad(p);
+      g += p.loss
+        ? `<rect class="dot loss" x="${cx - r * 0.75}" y="${cy - r * 0.75}" width="${r * 1.5}" height="${r * 1.5}" transform="rotate(45 ${cx} ${cy})"/>`
+        : `<circle class="dot" cx="${cx}" cy="${cy}" r="${r}"/>`;
+      g += `<circle class="hit" cx="${cx}" cy="${cy}" r="${Math.max(r, 12)}" data-tip="${esc(p.tip)}"/>`;
+      if (labelled.has(p)) g += `<text class="lbl" x="${cx}" y="${cy - r - 5}" text-anchor="middle">${esc(p.label)}</text>`;
+    });
+    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel)}と${esc(xLabel)}の散布図">${g}</svg></div>`;
+  }
+
+  function trendChart(c) {
+    const t = (c.trend || []).filter((r) => r.revenue != null);
+    if (t.length < 2) return "";
+    const W = 640, H = 220, L = 56, R = 10, T = 12, B = 34;
+    const max = Math.max(...t.map((r) => r.revenue));
+    const minP = Math.min(0, ...t.map((r) => r.profit ?? 0));
+    const Y = niceTicks(minP, max, 4);
+    const sy = (v) => T + (1 - (v - Y.lo) / (Y.hi - Y.lo)) * (H - T - B);
+    const band = (W - L - R) / t.length, bw = Math.min(26, band * 0.3);
+    let g = "";
+    Y.ticks.forEach((v) => { g += `<line class="${v === 0 ? "zero" : "grid"}" x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}"/><text x="${L - 6}" y="${sy(v) + 4}" text-anchor="end">${(v / 1e8).toLocaleString("ja-JP", { maximumFractionDigits: 0 })}</text>`; });
+    t.forEach((r, i) => {
+      const cx = L + band * i + band / 2;
+      const y0 = sy(0);
+      const rv = sy(r.revenue);
+      g += `<rect x="${cx - bw - 1}" y="${rv}" width="${bw}" height="${Math.max(1, y0 - rv)}" rx="3" fill="var(--series-soft)"/>`;
+      if (r.profit != null) {
+        const py = sy(r.profit);
+        g += `<rect x="${cx + 1}" y="${Math.min(py, y0)}" width="${bw}" height="${Math.max(1, Math.abs(y0 - py))}" rx="3" fill="${r.profit < 0 ? "var(--bad)" : "var(--series)"}"/>`;
+      }
+      g += `<text x="${cx}" y="${H - B + 15}" text-anchor="middle">${esc(r.period)}</text>`;
+      g += `<text x="${cx}" y="${H - 4}" text-anchor="middle">${r.margin != null ? "利益率 " + pct(r.margin) : ""}</text>`;
+      g += `<rect class="hit" x="${cx - band / 2}" y="${T}" width="${band}" height="${H - T - B}" data-tip="${esc(`${r.period}　売上 ${oku(r.revenue)}億円　${c.profit_label || "利益"} ${oku(r.profit)}億円`)}"/>`;
+    });
+    return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="売上と利益の推移">${g}</svg></div>
+      <div class="legend"><span><i class="rev"></i>売上（億円）</span><span><i class="prof"></i>${esc(c.profit_label || "利益")}</span></div>`;
+  }
+
+  function segBars(c) {
+    const segs = (c.segments || []).filter((s) => s.revenue != null);
+    if (!segs.length) return '<p class="note">セグメント情報なし（単一セグメント、または開示なし）。</p>';
+    const max = Math.max(...segs.map((s) => Math.max(s.revenue || 0, s.revenue_prior || 0)));
+    return `<div class="bars">${segs.map((s) => `<div class="bar-row"><span class="nm">${esc(s.segment)}</span><div class="bar-track">
+      <div class="bar" style="width:${(s.revenue / max * 100).toFixed(1)}%;${(s.profit ?? 0) < 0 ? "background:var(--bad)" : ""}"></div>
+      <div class="bar prior" style="width:${((s.revenue_prior || 0) / max * 100).toFixed(1)}%"></div>
+      <span class="bar-cap">${oku(s.revenue)}億円・利益率 <span class="${cls(s.margin)}">${pct(s.margin)}</span>・成長 <span class="${cls(s.growth)}">${pct(s.growth, true)}</span></span></div></div>`).join("")}</div>
+      <div class="legend"><span><i class="prof"></i>当期売上</span><span><i class="rev" style="background:var(--line)"></i>前期売上</span></div>`;
+  }
+
+  // ---------------------------------------------------------------- レポート
+  const srcTag = (s) => { const k = s === "IR" ? "ir" : s === "報道" ? "news" : "mix"; return `<span class="tag ${k}">${esc(s || "IR")}</span>`; };
+
+  function renderReport(r) {
+    $("#placeholder").hidden = true;
+    const el = $("#report"); el.hidden = false;
+    const cs = (r.companies || []).filter((c) => c.revenue != null).sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+    const segs = cs.flatMap((c) => (c.segments || []).filter((s) => s.revenue != null).map((s) => ({ ...s, company: c.name })));
+    const good = segs.filter((s) => (s.margin ?? -1) > 0 && (s.growth ?? -1) >= 0).sort((a, b) => b.margin - a.margin).slice(0, 10);
+    const bad = segs.filter((s) => (s.profit ?? 0) < 0 || (s.growth ?? 0) < -0.05).sort((a, b) => (a.margin ?? 0) - (b.margin ?? 0)).slice(0, 10);
+    const syn = r.synthesis || {};
+    const nd = r.news_digest || {};
+    const items = (r.news && r.news.items) || [];
+    const newsById = Object.fromEntries(items.map((n) => [n.id, n]));
+    const refs = (ids) => (ids || []).slice(0, 4).map((i) => newsById[i]).filter(Boolean).map((n) => safeUrl(n.link) ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">[${esc(n.source)}]</a>` : "").join(" ");
+    let h = "";
+
+    h += `<header class="head"><div class="eyebrow">${r.sample ? "サンプル" : "レポート"}・${esc(r.generated_at || "")}</div><h1>${esc(r.subject || r.title)}</h1>
+      <div class="meta">${cs.length}社・ニュース ${items.length}件${r.params?.news_days ? `（直近${esc(r.params.news_days)}日）` : ""}・${r.llm_enabled ? "Claudeによる要約あり" : "数値からの自動要約"}</div></header>`;
+    if ((r.warnings || []).length) h += `<div class="msg warn">${r.warnings.map(esc).join("<br>")}</div>`;
+
+    // 総括
+    h += `<section class="card"><h2>総括</h2>`;
+    if (syn.headline) h += `<p class="headline">${esc(syn.headline)}</p>`;
+    if ((r.highlights || []).length) h += `<ul class="plain">${r.highlights.map((x) => `<li>${esc(x)}</li>`).join("")}</ul><p class="note">箇条書きは有価証券報告書の数値から自動算出</p>`;
+    if ((syn.profitable || []).length || (syn.unprofitable || []).length) {
+      const col = (arr) => arr.map((x) => `<p>${srcTag(x.source)}<b>${esc(x.business)}</b><br>${esc(x.why)}<br><span class="note">例：${esc(x.examples)}</span></p>`).join("") || '<p class="note">該当なし</p>';
+      h += `<div class="two" style="margin-top:12px"><div class="good-col"><h3>儲かっている事業・サービス</h3>${col(syn.profitable || [])}</div><div class="bad-col"><h3>儲かっていない事業・サービス</h3>${col(syn.unprofitable || [])}</div></div>`;
+    }
+    if ((syn.ma_implications || []).length) h += `<h3 style="margin-top:12px">M&A・事業戦略への示唆</h3><ul class="plain">${syn.ma_implications.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    if ((syn.ir_vs_news || []).length) h += `<h3 style="margin-top:12px">IRの数値と報道のギャップ</h3><ul class="plain">${syn.ir_vs_news.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    h += `</section>`;
+
+    // IR 比較
+    h += `<section class="card"><h2><span class="tag ir">IR情報</span>業績比較</h2><div class="tbl"><table>
+      <thead><tr><th>会社</th><th>決算期</th><th class="n">売上(億円)</th><th class="n">利益(億円)</th><th class="n">利益率</th><th class="n">前年比</th><th class="n">CAGR</th><th class="n">ROE</th></tr></thead><tbody>
+      ${cs.map((c) => `<tr><td><a href="#co-${esc(c.sec_code || c.name)}">${esc(c.name)}</a><br><span class="note">${esc(c.industry || "")}・${esc(c.standard || "")}</span></td><td>${esc(c.period || "")}</td>
+      <td class="n">${oku(c.revenue)}</td><td class="n ${cls(c.profit)}">${oku(c.profit)}</td><td class="n">${pct(c.margin)}</td><td class="n ${cls(c.yoy)}">${pct(c.yoy, true)}</td>
+      <td class="n">${pct(c.cagr, true)}</td><td class="n">${pct(c.roe)}</td></tr>`).join("")}</tbody></table></div>
+      <p class="note">利益は営業利益（ない場合は経常利益→税引前利益）。会計基準が異なる会社どうしは、利益の定義が厳密には一致しません。</p>`;
+    const cpts = cs.filter((c) => c.margin != null && (c.cagr ?? c.yoy) != null).map((c) => ({ x: c.cagr ?? c.yoy, y: c.margin, size: c.revenue, label: c.name.replace(/株式会社/g, ""), tip: `${c.name}　売上 ${oku(c.revenue)}億円　成長 ${pct(c.cagr ?? c.yoy, true)}　利益率 ${pct(c.margin)}` }));
+    if (cpts.length >= 2) h += `<h3 style="margin:14px 0 4px">成長性 × 収益性（円の大きさ＝売上）</h3>` + scatter(cpts, { xLabel: "売上成長率（CAGR、なければ前年比）", yLabel: "利益率" });
+    h += `</section>`;
+
+    // セグメント
+    if (segs.length) {
+      const spts = segs.filter((s) => s.margin != null && s.growth != null).map((s) => ({ x: s.growth, y: s.margin, size: s.revenue, loss: (s.profit ?? 0) < 0, label: s.segment, tip: `${s.company.replace(/株式会社/g, "")}／${s.segment}　売上 ${oku(s.revenue)}億円　成長 ${pct(s.growth, true)}　利益率 ${pct(s.margin)}` }));
+      const row = (s) => `<tr><td>${esc(s.company.replace(/株式会社/g, ""))}<br><b>${esc(s.segment)}</b></td><td class="n">${oku(s.revenue)}</td><td class="n ${cls(s.margin)}">${pct(s.margin)}</td><td class="n ${cls(s.growth)}">${pct(s.growth, true)}</td></tr>`;
+      const tbl = (arr) => `<div class="tbl"><table><thead><tr><th>会社／セグメント</th><th class="n">売上(億円)</th><th class="n">利益率</th><th class="n">成長率</th></tr></thead><tbody>${arr.map(row).join("") || '<tr><td colspan="4" class="note">該当なし</td></tr>'}</tbody></table></div>`;
+      h += `<section class="card"><h2><span class="tag ir">IR情報</span>どの事業が儲かっているか</h2>`;
+      if (spts.length >= 2) h += scatter(spts, { xLabel: "セグメント売上成長率（前年比）", yLabel: "セグメント利益率", labelTop: 10 }) + `<div class="legend"><span><i></i>黒字セグメント</span><span><i class="loss"></i>赤字セグメント</span><span>円の大きさ＝セグメント売上</span></div>`;
+      h += `<div class="two" style="margin-top:14px"><div class="good-col"><h3>高収益で伸びているセグメント</h3>${tbl(good)}</div><div class="bad-col"><h3>赤字・縮小しているセグメント</h3>${tbl(bad)}</div></div>
+        <p class="note">セグメント売上は原則「外部顧客への売上高」。セグメント利益の定義は会社ごとに異なるため、会社間の比較は目安です。</p></section>`;
+    }
+
+    // 企業別
+    h += `<section class="card"><h2><span class="tag ir">IR情報</span>企業別</h2>`;
+    cs.forEach((c) => {
+      const ins = c.insight || {};
+      const nProf = (c.trend || []).filter((t) => t.profit != null).length, nRev = (c.trend || []).filter((t) => t.revenue != null).length;
+      h += `<article class="co" id="co-${esc(c.sec_code || c.name)}"><div class="co-head"><h3>${esc(c.name)}</h3><small>${esc(c.sec_code || "")}・${esc(c.industry || "")}・${esc(c.standard || "")}・${esc(c.basis || "")}</small></div>
+        <div class="kpis"><div class="kpi"><div class="v">${oku(c.revenue)}</div><div class="l">売上（億円）${esc(c.period || "")}</div></div>
+        <div class="kpi"><div class="v ${cls(c.profit)}">${oku(c.profit)}</div><div class="l">${esc(c.profit_label || "利益")}（億円）</div></div>
+        <div class="kpi"><div class="v">${pct(c.margin)}</div><div class="l">利益率（前期 ${pct(c.margin_prev)}）</div></div>
+        <div class="kpi"><div class="v ${cls(c.yoy)}">${pct(c.yoy, true)}</div><div class="l">売上 前年比</div></div>
+        ${c.interim ? `<div class="kpi"><div class="v ${cls(c.interim.revenue_yoy)}">${pct(c.interim.revenue_yoy, true)}</div><div class="l">${esc(c.interim.period || "中間期")} 売上前年比</div></div>` : ""}</div>
+        ${ins.summary ? `<p>${esc(ins.summary)}</p>` : ""}
+        ${trendChart(c)}
+        ${nProf && nProf < nRev ? `<p class="note">有報の5期推移に${esc(c.profit_label)}の記載がないため、${esc(c.profit_label)}は直近${nProf}期のみ表示しています。</p>` : ""}
+        <h3>セグメント別の売上と利益率</h3>${segBars(c)}
+        ${(ins.profitable || []).length || (ins.struggling || []).length ? `<div class="two"><div><h3>好調な事業</h3><ul class="plain">${(ins.profitable || []).map((x) => `<li><b>${esc(x.business)}</b>：${esc(x.evidence)}</li>`).join("")}</ul></div><div><h3>苦戦している事業</h3><ul class="plain">${(ins.struggling || []).map((x) => `<li><b>${esc(x.business)}</b>：${esc(x.evidence)}</li>`).join("")}</ul></div></div>` : ""}
+        ${ins.ma_view ? `<p><b>M&Aの観点：</b>${esc(ins.ma_view)}</p>` : ""}
+        ${(c.errors || []).length ? `<p class="note neg">${c.errors.map(esc).join("<br>")}</p>` : ""}
+        ${safeUrl(c.doc_url) ? `<p class="note">出典：<a href="${esc(c.doc_url)}" target="_blank" rel="noopener">EDINET 有価証券報告書（${esc(c.submit_date || "")}提出）</a></p>` : ""}</article>`;
+    });
+    h += `</section>`;
+
+    // 報道
+    h += `<section class="card"><h2><span class="tag news">報道</span>ニュース・業界紙（IR情報とは別）</h2>`;
+    if (!items.length) h += `<p class="note">このレポートにはニュースが含まれていません。</p>`;
+    else {
+      if (nd.overview) h += `<p class="headline" style="font-weight:500">${esc(nd.overview)}</p>`;
+      if ((nd.growing || []).length || (nd.declining || []).length)
+        h += `<div class="two"><div class="good-col"><h3>伸びている領域（報道ベース）</h3>${(nd.growing || []).map((x) => `<p><b>${esc(x.area)}</b>：${esc(x.evidence)} ${refs(x.article_ids)}</p>`).join("") || '<p class="note">該当なし</p>'}</div>
+        <div class="bad-col"><h3>苦戦している領域（報道ベース）</h3>${(nd.declining || []).map((x) => `<p><b>${esc(x.area)}</b>：${esc(x.evidence)} ${refs(x.article_ids)}</p>`).join("") || '<p class="note">該当なし</p>'}</div></div>`;
+      if ((nd.deals || []).length) h += `<h3 style="margin-top:12px">M&A・提携・撤退の動き</h3><ul class="plain">${nd.deals.map((d) => `<li>${esc(d.summary)} ${refs(d.article_ids)}</li>`).join("")}</ul>`;
+      h += `<details style="margin-top:12px" ${nd.overview ? "" : "open"}><summary>収集した記事（${items.length}件）</summary>${items.map((n) => `<div class="news-item"><time>${esc(n.date || "")}</time><span>${safeUrl(n.link) ? `<a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a>` : esc(n.title)}<br><small>${esc(n.source || "")}・${esc(n.channel || "")}</small></span></div>`).join("")}</details>`;
+    }
+    h += `</section>`;
+    h += `<p class="note">IR情報：金融庁 EDINET（公共データ利用規約 PDL1.0）を加工して作成。文章の要約は誤りを含む可能性があるため、重要な判断の前に原典を確認してください。</p>`;
+    el.innerHTML = h;
+  }
+
+  // ツールチップ
+  const tip = $("#tip");
+  document.addEventListener("pointermove", (e) => {
+    const t = e.target.closest?.("[data-tip]");
+    if (!t) { tip.hidden = true; return; }
+    tip.textContent = t.getAttribute("data-tip"); tip.hidden = false;
+    tip.style.left = e.pageX + "px"; tip.style.top = e.pageY + "px";
+  });
+
+  // ---------------------------------------------------------------- 接続
+  async function boot() {
+    const use = window.claude?.use?.bind(window.claude);
+    if (!use) { $("#reps").innerHTML = '<p class="hint">claude.ai で開くと、依頼とレポートが表示されます。</p>'; return; }
+    state.db = await use("db").catch(() => null);
+    if (!state.db) { $("#reps").innerHTML = '<p class="hint">保存領域に接続できません。claude.ai にサインインした状態で開いてください。</p>'; $("#submit").disabled = true; return; }
+    state.db.doc("config/app").onSnapshot((s) => { state.config = s.exists ? s.data() : null; }, () => {});
+    state.db.collection("report_index").orderBy("generated_at", "desc").limit(200).onSnapshot((snap) => {
+      state.index = snap.docs.map((d) => d.data());
+      renderIndex();
+      if (!state.selected && state.index.length) openReport(state.index[0].slug);
+    }, () => { $("#reps").innerHTML = '<p class="hint">レポート一覧を読み込めませんでした。ページを開き直してください。</p>'; });
+    state.db.collection("requests").orderBy("created_at", "desc").limit(30).onSnapshot((snap) => {
+      state.requests = snap.docs.map((d) => d.data());
+      renderRequests();
+      const mine = state.pendingAutoOpen && state.requests.find((r) => r.id === state.pendingAutoOpen);
+      if (mine && mine.status === "done" && mine.report_id) { state.pendingAutoOpen = null; openReport(mine.report_id); showMsg("ok", "分析が完了しました。"); }
+      if (mine && mine.status === "error") { state.pendingAutoOpen = null; showMsg("err", "分析が失敗しました：" + (mine.error || "理由は「依頼の状況」を確認してください")); }
+    }, () => {});
+    use("user").then(async (u) => {
+      state.user = u;
+      if (!u) return;
+      try { state.uid = await u.id(); } catch {}
+      let w = null;
+      try { w = await u.can("data.write"); } catch {}
+      if (w === false) { $("#submit").disabled = true; $("#form-hint").textContent = "閲覧のみの共有のため、分析を依頼できません。"; }
+    }).catch(() => {});
+    use("mcp").then((m) => { state.mcp = m; }).catch(() => {});
+  }
+  boot();
+})();
+</script>

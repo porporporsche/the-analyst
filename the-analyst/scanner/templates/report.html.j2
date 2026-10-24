@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ r.title }}</title>
+<script src="{{ plotly_js }}"></script>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#f7f6f3; --surface:#ffffff; --ink:#1d1c1a; --ink-2:#52514e; --ink-3:#8c8b86;
+  --line:#ecebe7; --accent:#1c5cab; --accent-bg:#e8f0fb; --good:#0a7a3d; --good-bg:#e5f4ea;
+  --bad:#b42d2c; --bad-bg:#fbe9e8; --news:#7a4b00; --news-bg:#fdf3df;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 'Hiragino Sans','Noto Sans JP','Yu Gothic UI',Meiryo,sans-serif}
+main{max-width:1120px;margin:0 auto;padding:28px 16px 80px}
+header.top{margin-bottom:20px}
+.eyebrow{font-size:12px;letter-spacing:.08em;color:var(--ink-3);text-transform:uppercase}
+h1{font-size:26px;line-height:1.35;margin:4px 0 8px}
+h2{font-size:20px;margin:40px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--ink)}
+h3{font-size:16px;margin:24px 0 8px}
+.meta{color:var(--ink-2);font-size:13px}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;vertical-align:middle;margin-right:6px}
+.tag.ir{background:var(--accent-bg);color:var(--accent)} .tag.news{background:var(--news-bg);color:var(--news)}
+.tag.mix{background:#efeaf8;color:#4a3aa7} .tag.demo{background:#fdecc8;color:#7a4b00}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin:12px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:8px 0 4px}
+.kpi{background:var(--bg);border-radius:8px;padding:10px 12px}
+.kpi .v{font-size:20px;font-weight:700;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:12px;color:var(--ink-2)}
+.headline{font-size:17px;font-weight:600;line-height:1.6}
+ul.plain{padding-left:1.2em;margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--ink-2);background:#faf9f7;position:sticky;top:0}
+td.n,th.n{text-align:right;white-space:nowrap}
+.tbl{overflow-x:auto;max-height:560px}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+.pill-good{background:var(--good-bg);color:var(--good);border-radius:6px;padding:1px 6px}
+.pill-bad{background:var(--bad-bg);color:var(--bad);border-radius:6px;padding:1px 6px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+.box-good{border-left:4px solid var(--good)} .box-bad{border-left:4px solid var(--bad)}
+details{margin:8px 0} summary{cursor:pointer;color:var(--accent);font-weight:600}
+.excerpt{white-space:pre-wrap;font-size:13px;color:var(--ink-2);max-height:360px;overflow:auto;background:var(--bg);padding:10px 12px;border-radius:6px}
+.src{font-size:12px;color:var(--ink-3)}
+.src a{color:var(--ink-3)}
+a{color:var(--accent)}
+.section-news h2{border-color:var(--news)}
+.note{font-size:12.5px;color:var(--ink-2)}
+nav.toc{font-size:13px;display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px}
+nav.toc a{text-decoration:none}
+.warn{background:#fff7e0;border:1px solid #f1d58a;border-radius:8px;padding:10px 14px;font-size:13px}
+</style>
+</head>
+<body>
+<main>
+<header class="top">
+  <div class="eyebrow">IR × 業界ニュース スキャン</div>
+  <h1>{{ r.title }} {% if r.demo %}<span class="tag demo">デモ（架空データ）</span>{% endif %}</h1>
+  <div class="meta">生成 {{ r.generated_at }} ／ 対象 {{ companies|length }} 社 ／ ニュース {{ r.news["items"]|length }} 件（直近 {{ r.params.news_days }} 日）
+    {% if not r.llm_enabled %}／ LLM要約: なし（ANTHROPIC_API_KEY 未設定）{% else %}／ LLM: {{ r.llm_model }}{% endif %}</div>
+  <nav class="toc">
+    <a href="#summary">総括</a><a href="#ir">IR分析</a>{% if segs %}<a href="#segments">セグメント</a>{% endif %}
+    <a href="#companies">企業別詳細</a><a href="#news">ニュース・業界紙</a><a href="#notes">注記</a>
+  </nav>
+</header>
+
+{% if r.warnings %}<div class="warn"><b>注意</b><ul class="plain">{% for w in r.warnings %}<li>{{ w }}</li>{% endfor %}</ul></div>{% endif %}
+
+<!-- ============================== 総括 -->
+<section id="summary">
+<h2>総括</h2>
+{% set syn = r.synthesis or {} %}
+<div class="card">
+  {% if syn.headline %}<p class="headline">{{ syn.headline }}</p>{% endif %}
+  {% if r.highlights %}<ul class="plain">{% for h in r.highlights %}<li>{{ h }}</li>{% endfor %}</ul>
+  <p class="src">上記箇条書きは有価証券報告書の数値から自動算出</p>{% endif %}
+</div>
+{% if syn.profitable or syn.unprofitable %}
+<div class="two">
+  <div class="card box-good"><h3>儲かっている事業・サービス</h3>
+    {% for x in syn.profitable or [] %}<p><b>{{ x.business }}</b> <span class="tag {{ 'ir' if x.source=='IR' else ('news' if x.source=='報道' else 'mix') }}">{{ x.source }}</span><br>{{ x.why }}<br><span class="src">例: {{ x.examples }}</span></p>{% endfor %}
+  </div>
+  <div class="card box-bad"><h3>儲かっていない事業・サービス</h3>
+    {% for x in syn.unprofitable or [] %}<p><b>{{ x.business }}</b> <span class="tag {{ 'ir' if x.source=='IR' else ('news' if x.source=='報道' else 'mix') }}">{{ x.source }}</span><br>{{ x.why }}<br><span class="src">例: {{ x.examples }}</span></p>{% endfor %}
+  </div>
+</div>
+{% endif %}
+{% if syn.ma_implications or syn.ir_vs_news %}
+<div class="two">
+  {% if syn.ma_implications %}<div class="card"><h3>M&A・事業戦略への示唆</h3><ul class="plain">{% for x in syn.ma_implications %}<li>{{ x }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if syn.ir_vs_news %}<div class="card"><h3>IR数値と報道のギャップ</h3><ul class="plain">{% for x in syn.ir_vs_news %}<li>{{ x }}</li>{% endfor %}</ul></div>{% endif %}
+</div>
+{% endif %}
+</section>
+
+<!-- ============================== IR -->
+<section id="ir">
+<h2><span class="tag ir">IR情報</span>業績比較</h2>
+{% if multi %}
+<div class="card tbl">
+<table>
+<tr><th>会社</th><th>業種</th><th>決算期</th><th class="n">売上(億円)</th><th class="n">利益(億円)</th><th class="n">利益率</th><th class="n">前年比</th><th class="n">CAGR</th><th class="n">ROE</th><th>直近中間期 売上前年比</th></tr>
+{% for c in companies %}{% set m = c.metrics %}
+<tr><td><a href="#c-{{ c.edinet_code }}">{{ c.name }}</a></td><td>{{ c.industry }}</td><td>{{ m.period }}</td>
+<td class="n">{{ oku(m.revenue) }}</td><td class="n {{ 'neg' if (m.profit or 0) < 0 }}">{{ oku(m.profit) }}</td>
+<td class="n">{{ pct(m.margin) }}</td><td class="n {{ 'pos' if (m.yoy or 0) > 0 else 'neg' if (m.yoy or 0) < 0 }}">{{ pct(m.yoy, sign=True) }}</td>
+<td class="n">{{ pct(m.cagr, sign=True) }}{% if m.cagr_years %}<span class="src"> ({{ m.cagr_years }}年)</span>{% endif %}</td>
+<td class="n">{{ pct(m.roe) }}</td>
+<td>{% if m.interim %}{{ m.interim.period }} {{ pct(m.interim.revenue_yoy, sign=True) }}{% else %}—{% endif %}</td></tr>
+{% endfor %}
+</table>
+</div>
+<p class="note">利益は営業利益（無い場合は経常利益→税引前利益）。会計基準（日本基準/IFRS/米国基準）が混在する場合、利益の定義が厳密には一致しません。</p>
+<div class="card">{{ fig_bubble|safe if fig_bubble }}</div>
+{% if fig_lines %}<div class="card">{{ fig_lines|safe }}</div>{% endif %}
+{% else %}
+<p class="note">単一企業のレポートです。企業別詳細をご覧ください。</p>
+{% endif %}
+
+{% if segs %}
+<h2 id="segments"><span class="tag ir">IR情報</span>事業セグメント分析 — どの事業が儲かっているか</h2>
+{% if fig_seg %}<div class="card">{{ fig_seg|safe }}</div>{% endif %}
+<div class="two">
+<div class="card box-good"><h3>高収益かつ伸びているセグメント</h3>
+<div class="tbl"><table><tr><th>会社／セグメント</th><th class="n">売上</th><th class="n">利益率</th><th class="n">成長率</th></tr>
+{% for s in seg_good %}<tr><td>{{ s.company }}<br><b>{{ s.segment }}</b></td><td class="n">{{ oku(s.revenue) }}</td><td class="n">{{ pct(s.margin) }}</td><td class="n">{{ pct(s.growth, sign=True) }}</td></tr>{% else %}<tr><td colspan=4>該当なし</td></tr>{% endfor %}
+</table></div></div>
+<div class="card box-bad"><h3>赤字・縮小しているセグメント</h3>
+<div class="tbl"><table><tr><th>会社／セグメント</th><th class="n">売上</th><th class="n">利益率</th><th class="n">成長率</th></tr>
+{% for s in seg_bad %}<tr><td>{{ s.company }}<br><b>{{ s.segment }}</b></td><td class="n">{{ oku(s.revenue) }}</td><td class="n {{ 'neg' if (s.profit or 0) < 0 }}">{{ pct(s.margin) }}</td><td class="n {{ 'neg' if (s.growth or 0) < 0 }}">{{ pct(s.growth, sign=True) }}</td></tr>{% else %}<tr><td colspan=4>該当なし</td></tr>{% endfor %}
+</table></div></div>
+</div>
+<details><summary>全セグメント一覧（{{ segs|length }}件）</summary>
+<div class="card tbl"><table><tr><th>会社</th><th>セグメント</th><th class="n">売上(億円)</th><th class="n">前期売上</th><th class="n">セグメント利益</th><th class="n">利益率</th><th class="n">売上成長率</th><th class="n">社内構成比</th></tr>
+{% for s in segs|sort(attribute='revenue', reverse=True) %}<tr><td>{{ s.company }}</td><td>{{ s.segment }}</td><td class="n">{{ oku(s.revenue) }}</td><td class="n">{{ oku(s.revenue_prior) }}</td><td class="n {{ 'neg' if (s.profit or 0) < 0 }}">{{ oku(s.profit) }}</td><td class="n">{{ pct(s.margin) }}</td><td class="n">{{ pct(s.growth, sign=True) }}</td><td class="n">{{ pct(s.share, 0) }}</td></tr>{% endfor %}
+</table></div></details>
+<p class="note">セグメント売上は原則「外部顧客への売上高」。セグメント利益の定義（営業利益・事業利益など）は会社ごとに異なるため、会社間の比較は目安です。</p>
+{% endif %}
+</section>
+
+<!-- ============================== 企業別 -->
+<section id="companies">
+<h2><span class="tag ir">IR情報</span>企業別詳細</h2>
+{% for c in companies %}{% set m = c.metrics %}{% set ins = c.insight or {} %}
+<div class="card" id="c-{{ c.edinet_code }}">
+  <h3 style="margin-top:0">{{ c.name }} <span class="src">{{ c.sec_code }} ／ {{ c.industry }} ／ {{ (c.annual or {}).standard }}・{{ (c.annual or {}).basis }}</span></h3>
+  <div class="kpis">
+    <div class="kpi"><div class="v">{{ oku(m.revenue) }}<small>億円</small></div><div class="l">売上 {{ m.period }}</div></div>
+    <div class="kpi"><div class="v {{ 'neg' if (m.profit or 0) < 0 }}">{{ oku(m.profit) }}<small>億円</small></div><div class="l">{{ m.profit_label }}</div></div>
+    <div class="kpi"><div class="v">{{ pct(m.margin) }}</div><div class="l">{{ m.profit_label }}率（前期 {{ pct(m.margin_prev) }}）</div></div>
+    <div class="kpi"><div class="v">{{ pct(m.yoy, sign=True) }}</div><div class="l">売上 前年比</div></div>
+    {% if m.interim %}<div class="kpi"><div class="v">{{ pct(m.interim.revenue_yoy, sign=True) }}</div><div class="l">{{ m.interim.period }} 売上前年比</div></div>{% endif %}
+  </div>
+  {% if ins.summary %}<p><b>要約：</b>{{ ins.summary }}</p>{% endif %}
+  {% if c._trend_figs %}<div class="grid2"><div>{{ c._trend_figs[0]|safe }}</div><div>{{ c._trend_figs[1]|safe }}</div></div>
+  {% set n_rev = m.trend|selectattr('revenue')|list|length %}{% set n_prof = m.trend|rejectattr('profit', 'none')|list|length %}
+  {% if n_prof < n_rev %}<p class="note">※ 有報の「主要な経営指標等の推移」に{{ m.profit_label }}の記載がないため、{{ m.profit_label }}と利益率は損益計算書に載っている直近{{ n_prof }}期分のみ表示しています。</p>{% endif %}{% endif %}
+  {% if c._seg_fig %}{{ c._seg_fig|safe }}{% elif not m.segments %}<p class="note">セグメント情報なし（単一セグメント等）。</p>{% endif %}
+  {% if ins.profitable or ins.struggling %}
+  <div class="two">
+    <div><h3>好調な事業</h3><ul class="plain">{% for x in ins.profitable or [] %}<li><b>{{ x.business }}</b>：{{ x.evidence }}</li>{% endfor %}</ul></div>
+    <div><h3>苦戦している事業</h3><ul class="plain">{% for x in ins.struggling or [] %}<li><b>{{ x.business }}</b>：{{ x.evidence }}</li>{% endfor %}</ul></div>
+  </div>{% endif %}
+  {% if ins.strategy %}<h3>会社の重点施策</h3><ul class="plain">{% for x in ins.strategy %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
+  {% if ins.ma_view %}<h3>M&Aの観点</h3><p>{{ ins.ma_view }}</p>{% endif %}
+  {% for k, t in (c.texts or {}).items() if k in text_titles and k != 'segments_note' %}
+  <details><summary>有報原文抜粋：{{ text_titles[k] }}</summary><div class="excerpt">{{ t[:2500] }}{% if t|length > 2500 %} …（以下略）{% endif %}</div></details>
+  {% endfor %}
+  {% if c.errors %}<p class="note neg">取得エラー: {{ c.errors|join(' / ') }}</p>{% endif %}
+  {% if c._doc_url %}<p class="src">出典: EDINET <a href="{{ c._doc_url }}" target="_blank" rel="noopener">有価証券報告書（{{ (c.annual or {}).submit_date }}提出）</a>{% if c._interim_url %} ／ <a href="{{ c._interim_url }}" target="_blank" rel="noopener">{{ c.interim.doc_label }}（{{ c.interim.submit_date }}提出）</a>{% endif %}</p>{% endif %}
+</div>
+{% endfor %}
+</section>
+
+<!-- ============================== NEWS -->
+<section id="news" class="section-news">
+<h2><span class="tag news">報道</span>ニュース・業界紙のまとめ（IR情報とは別）</h2>
+<p class="note">検索語: {{ r.news.queries|join('、') }}{% if r.news.feeds %} ／ 業界紙RSS: {{ r.news.feeds|join('、') }}{% endif %}。見出しと要約のみ掲載し、本文は各リンク先をご覧ください。</p>
+{% set nd = r.news_digest or {} %}
+{% if nd.overview %}<div class="card"><p class="headline" style="font-weight:500">{{ nd.overview }}</p></div>{% endif %}
+{% macro refs(ids) %}{% for i in (ids or [])[:4] %}{% set n = news_by_id.get(i) %}{% if n %}<a class="src" href="{{ n.link }}" target="_blank" rel="noopener">[{{ n.source }} {{ n.date[5:] }}]</a> {% endif %}{% endfor %}{% endmacro %}
+{% if nd.growing or nd.declining %}
+<div class="two">
+  <div class="card box-good"><h3>伸びている領域（報道ベース）</h3>{% for x in nd.growing or [] %}<p><b>{{ x.area }}</b>：{{ x.evidence }}<br>{{ refs(x.article_ids) }}</p>{% endfor %}</div>
+  <div class="card box-bad"><h3>苦戦している領域（報道ベース）</h3>{% for x in nd.declining or [] %}<p><b>{{ x.area }}</b>：{{ x.evidence }}<br>{{ refs(x.article_ids) }}</p>{% endfor %}</div>
+</div>{% endif %}
+{% if nd.themes %}<div class="card"><h3>主要テーマ</h3>{% for t in nd.themes %}<p><b>{{ t.title }}</b><br>{{ t.summary }}<br>{{ refs(t.article_ids) }}</p>{% endfor %}</div>{% endif %}
+{% if nd.deals %}<div class="card"><h3>M&A・提携・撤退の動き</h3><ul class="plain">{% for d in nd.deals %}<li>{{ d.summary }} {{ refs(d.article_ids) }}</li>{% endfor %}</ul></div>{% endif %}
+<details {% if not nd %}open{% endif %}><summary>収集した記事一覧（{{ r.news["items"]|length }}件）</summary>
+<div class="card tbl"><table><tr><th>日付</th><th>媒体</th><th>見出し</th><th>区分</th></tr>
+{% for n in r.news["items"] %}<tr><td style="white-space:nowrap">{{ n.date }}</td><td>{{ n.source }}</td><td><a href="{{ n.link }}" target="_blank" rel="noopener">{{ n.title }}</a></td><td class="src">{{ n.channel }}<br>{{ n.query }}</td></tr>{% endfor %}
+</table></div></details>
+{% if r.news.errors %}<p class="note">取得できなかったソース: {{ r.news.errors|join(' / ') }}</p>{% endif %}
+</section>
+
+<section id="notes">
+<h2>注記・データ出典</h2>
+<ul class="plain note">
+  <li>IR情報: 金融庁 EDINET API v2（有価証券報告書・半期報告書のXBRLデータ）。金額は億円表示（四捨五入）。出典：EDINET閲覧（提出）サイト（各社欄のリンク先）、<a href="https://www.digital.go.jp/resources/open_data/public_data_license_v1.0" target="_blank" rel="noopener">公共データ利用規約（PDL1.0）</a>に基づき加工して作成。</li>
+  <li>5期推移は有価証券報告書「主要な経営指標等の推移」から取得。会計方針変更・決算期変更の影響は補正していません。</li>
+  <li>ニュース: Googleニュース RSS検索{% if r.news.feeds %}、および設定された業界紙RSS{% endif %}。報道内容の正確性は各媒体に依拠します。</li>
+  <li>「総括」「要約」等の文章は{% if r.llm_enabled %}LLM（{{ r.llm_model }}）が上記データから生成したもので、誤りを含む可能性があります。重要な判断の前に原典をご確認ください。{% else %}数値からのルールベース自動生成です。{% endif %}</li>
+  <li>実行パラメータ: {{ r.params|tojson }}</li>
+</ul>
+</section>
+</main>
+</body>
+</html>

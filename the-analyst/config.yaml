@@ -1,0 +1,24 @@
+# ir-industry-scanner 設定
+
+llm:
+  # Claude API のモデル名（ANTHROPIC_API_KEY が設定されているときのみ使用）
+  model: claude-sonnet-5-5
+
+news:
+  per_query: 25          # Googleニュース 1検索あたりの最大件数
+  max_total: 150         # レポートに載せる最大記事数
+  company_queries: 6     # 売上上位何社まで社名でニュース検索するか
+  fetch_bodies: true     # 業界紙RSSの記事本文をLLM要約の入力に使う（レポートには保存しない）
+  body_limit: 30
+
+  # 常に追加したい検索語（例: 自社の注目テーマ）
+  extra_queries: []
+  #  - "中堅企業 DX 投資"
+
+  # 業界紙・専門メディアのRSS。タイトル/概要に業界キーワードか社名を含む記事だけ取り込む。
+  # 購読している業界紙のRSS URLをここに追加してください（利用規約の範囲で）。
+  feeds: []
+  #  - name: "ITmedia ビジネスオンライン"
+  #    url: "https://rss.itmedia.co.jp/rss/2.0/business.xml"
+  #  - name: "日経クロステック"
+  #    url: "https://xtech.nikkei.com/rss/index.rdf"

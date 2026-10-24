@@ -1,0 +1,131 @@
+name: IR Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "company=企業を指定 / industry=業種で抽出 / check=接続診断（APIキー等の確認）"
+        type: choice
+        options: [company, industry, check]
+        default: company
+      target:
+        description: "会社名・証券コード（カンマ区切りで複数可）または業種名（例: 情報・通信業）。checkでは省略可"
+        required: false
+        default: ""
+      name_filter:
+        description: "[industryのみ] 社名の絞り込みキーワード（例: システム,ソフト）"
+        required: false
+        default: ""
+      news_keywords:
+        description: "ニュース検索の業界キーワード（例: SaaS,クラウド会計）"
+        required: false
+        default: ""
+      max_companies:
+        description: "最大社数（上限30）"
+        required: false
+        default: "12"
+      news_days:
+        description: "ニュースの対象期間（日）"
+        required: false
+        default: "90"
+      commit_report:
+        description: "レポートをリポジトリ（docs/reports）にコミットする"
+        type: boolean
+        default: true
+  # Claude などから requests/<id>.json を push すると、その内容で実行する
+  push:
+    branches: [main]
+    paths: ["requests/*.json", "!requests/*.result.json"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ir-scan
+  cancel-in-progress: false
+
+env:
+  PYTHONUNBUFFERED: "1"
+  PYTHONUTF8: "1"
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2  # push 起動時に、追加された依頼ファイルを特定するため
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # EDINETの日次書類一覧とコードリスト（小さいJSON/ZIP）だけを次回以降に再利用して高速化する。
+      # 書類本体のZIPは .cache/edinet-files に置き、キャッシュしない。
+      - uses: actions/cache@v6
+        with:
+          path: .cache/edinet
+          key: edinet-${{ github.run_id }}
+          restore-keys: edinet-
+
+      - run: pip install -r requirements.txt
+
+      - name: Run scanner
+        id: scan
+        env:
+          EDINET_API_KEY: ${{ secrets.EDINET_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          IN_MODE: ${{ inputs.mode }}
+          IN_TARGET: ${{ inputs.target }}
+          IN_NAME_FILTER: ${{ inputs.name_filter }}
+          IN_NEWS_KEYWORDS: ${{ inputs.news_keywords }}
+          IN_MAX: ${{ inputs.max_companies }}
+          IN_DAYS: ${{ inputs.news_days }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            REQ=$(git diff --name-only --diff-filter=AM HEAD~1 HEAD -- 'requests/*.json' | grep -v '\.result\.json$' | tail -n 1)
+            if [ -z "$REQ" ]; then echo "依頼ファイルが見つかりません"; exit 0; fi
+            echo "request_file=$REQ" >> "$GITHUB_OUTPUT"
+            echo "依頼ファイル: $REQ"
+            python -m scanner.main --request "$REQ"
+          else
+            python -m scanner.main \
+              --mode "$IN_MODE" --target "$IN_TARGET" \
+              --name-filter "$IN_NAME_FILTER" --news-keywords "$IN_NEWS_KEYWORDS" \
+              --max-companies "${IN_MAX:-12}" --news-days "${IN_DAYS:-90}"
+          fi
+
+      - name: Upload report artifact
+        if: ${{ steps.scan.outputs.report_dir != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ir-report-${{ steps.scan.outputs.slug }}
+          path: ${{ steps.scan.outputs.report_dir }}
+          if-no-files-found: error
+          retention-days: 90
+
+      # 依頼ファイル経由の実行は、失敗時も結果ファイル（requests/<id>.result.json）をコミットして理由を返す
+      - name: Commit report
+        if: ${{ always() && ((github.event_name == 'push' && steps.scan.outputs.request_file != '') || (inputs.commit_report && steps.scan.outputs.report_dir != '')) }}
+        env:
+          SLUG: ${{ steps.scan.outputs.slug || steps.scan.outputs.request_file }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/ requests/ 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "コミットする変更はありません"
+            exit 0
+          fi
+          git commit -m "report: ${SLUG}"
+          for i in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "push に失敗したため、最新を取り込んで再試行します ($i/3)"
+            git pull --rebase -X theirs
+          done
+          echo "::error::レポートをpushできませんでした。Settings → Actions → General → Workflow permissions が「Read and write」か、ブランチ保護の設定を確認してください（Artifactからは取得できます）。"
+          exit 1
